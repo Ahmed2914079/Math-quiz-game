@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Math Quiz</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #eef1f5;
+    }
+    .container {
+      max-width: 420px;
+      margin: auto;
+      background: #fff;
+      padding: 24px;
+      border-radius: 12px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      color: #333;
+    }
+    input, button {
+      width: 100%;
+      padding: 12px;
+      margin: 10px 0;
+      font-size: 1rem;
+    }
+    .question {
+      text-align: center;
+      font-size: 1.6rem;
+      margin: 20px 0;
+    }
+    .options {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: space-between;
+    }
+    .options button {
+      flex: 1 1 48%;
+      background: #f3f3f3;
+      border: none;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+    .options button:hover {
+      background: #dce0e4;
+    }
+    .scoreboard, .timer, .streak, .best-score {
+      text-align: center;
+      margin-top: 12px;
+      font-weight: bold;
+    }
+    .game-over {
+      text-align: center;
+      font-size: 1.2rem;
+      margin-top: 20px;
+      color: crimson;
+    }
+    .small-btn {
+      padding: 10px;
+      font-size: 0.9rem;
+      background: #ddd;
+      border-radius: 6px;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Math Quiz</h1>
+  <div id="mainContent">
+    <input type="text" id="playerName" placeholder="Enter your name" />
+    <button id="startBtn">Start</button>
+  </div>
+</div>
+
+<script>
+  class MathQuiz {
+    constructor() {
+      this.tts = window.speechSynthesis;
+      this.correct = 0;
+      this.wrong = 0;
+      this.streak = 0;
+      this.maxWrong = 3;
+      this.timer = null;
+      this.timeLeft = 10;
+      this.bestScore = Number(localStorage.getItem("bestScore") || 0);
+      this.savedName = localStorage.getItem("playerName") || "";
+      this.playerName = '';
+      this.started = false;
+      this.mainContent = document.getElementById("mainContent");
+      this.startBtn = document.getElementById("startBtn");
+      this.nameInput = document.getElementById("playerName");
+      this.nameInput.value = this.savedName;
+      this.startBtn.addEventListener("click", () => this.handleStart());
+    }
+
+    speak(text) {
+      if (!this.tts) return;
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'en-US';
+      this.tts.cancel();
+      this.tts.speak(utter);
+    }
+
+    handleStart() {
+      if (!this.started) {
+        this.playerName = this.nameInput.value.trim();
+        if (!this.playerName) return alert("Please enter your name.");
+        localStorage.setItem("playerName", this.playerName);
+        this.speak(`Hi ${this.playerName}, welcome to the quiz! Tap Start again to begin.`);
+        this.started = true;
+        this.startBtn.textContent = "Start Game";
+      } else {
+        this.correct = 0;
+        this.wrong = 0;
+        this.streak = 0;
+        this.showQuestion();
+      }
+    }
+
+    generateQuestion() {
+      const ops = ['+', '-', '*', '/'];
+      const op = ops[Math.floor(Math.random() * ops.length)];
+      let a = Math.floor(Math.random() * 10 + 1);
+      let b = Math.floor(Math.random() * 10 + 1);
+      if (op === '/') {
+        b = Math.max(1, Math.floor(Math.random() * a));
+        a = b * Math.floor(Math.random() * 5 + 1);
+      }
+      const expression = `${a} ${op} ${b}`;
+      let result = eval(expression);
+      result = op === '/' ? Math.round(result * 10) / 10 : result;
+      return { question: expression, answer: result };
+    }
+
+    showQuestion() {
+      if (this.wrong >= this.maxWrong) return this.showGameOver();
+
+      const { question, answer } = this.generateQuestion();
+      const options = new Set([answer]);
+      while (options.size < 4) {
+        let fake = answer + Math.floor(Math.random() * 10 - 5);
+        fake = Math.round(fake * 10) / 10;
+        options.add(fake);
+      }
+
+      const shuffled = [...options].sort(() => Math.random() - 0.5);
+      this.mainContent.innerHTML = `
+        <div class="question">${question} = ?</div>
+        <div class="options">
+          ${shuffled.map(opt => `<button>${opt}</button>`).join('')}
+        </div>
+        <div class="timer">Time left: <span id="timeLeft">${this.timeLeft}</span>s</div>
+        <div class="scoreboard">Correct: ${this.correct} | Wrong: ${this.wrong}</div>
+        <div class="streak">Streak: ${this.streak}</div>
+        <div class="best-score">Best Score: ${this.bestScore}</div>
+        <button id="skipBtn" class="small-btn">Skip</button>
+      `;
+
+      this.startTimer(() => {
+        this.wrong++;
+        this.streak = 0;
+        this.speak("Time's up!");
+        setTimeout(() => this.showQuestion(), 1000);
+      });
+
+      document.querySelectorAll(".options button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const selected = parseFloat(btn.textContent);
+          clearInterval(this.timer);
+          if (selected === answer) {
+            this.correct++;
+            this.streak++;
+            this.speak("Correct");
+          } else {
+            this.wrong++;
+            this.streak = 0;
+            this.speak("Wrong");
+          }
+          setTimeout(() => this.showQuestion(), 800);
+        });
+      });
+
+      document.getElementById("skipBtn").addEventListener("click", () => {
+        clearInterval(this.timer);
+        this.speak("Skipped");
+        this.streak = 0;
+        setTimeout(() => this.showQuestion(), 500);
+      });
+    }
+
+    startTimer(onTimeout) {
+      this.timeLeft = 10;
+      const display = document.getElementById("timeLeft");
+      this.timer = setInterval(() => {
+        this.timeLeft--;
+        display.textContent = this.timeLeft;
+        if (this.timeLeft <= 0) {
+          clearInterval(this.timer);
+          onTimeout();
+        }
+      }, 1000);
+    }
+
+    showGameOver() {
+      const finalScore = this.correct - this.wrong;
+      if (finalScore > this.bestScore) {
+        localStorage.setItem("bestScore", finalScore);
+        this.bestScore = finalScore;
+        this.speak(`New high score! You scored ${finalScore}`);
+      } else {
+        this.speak(`Game over. Final score: ${finalScore}`);
+      }
+
+      this.mainContent.innerHTML = `
+        <div class="game-over">Game Over!</div>
+        <div class="scoreboard">Final Score: ${finalScore}</div>
+        <div class="best-score">Best Score: ${this.bestScore}</div>
+        <button id="replayBtn">Play Again</button>
+      `;
+
+      document.getElementById("replayBtn").addEventListener("click", () => {
+        this.correct = 0;
+        this.wrong = 0;
+        this.streak = 0;
+        this.showQuestion();
+      });
+    }
+  }
+
+  new MathQuiz();
+</script>
+
+</body>
+</html>Enter file contents here
